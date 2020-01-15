@@ -8,6 +8,71 @@
 
 using namespace std;
 
+/*
+NOTE: For mouse targeting - rotate from current pos to mouse pos
+future maths: rotate to point (cangle between two points)
+using Mathf.Atan2 with 2d points, do;
+y2-y1 and x2-x1
+this will give (in radians) the angle to rotate to meet the target point
+
+The alternative would be to just always target the mouse...
+
+Either way, if player object is to target the mouse when directly above or below,
+then face the direction of current/last movemeant. For example, if player was moving left,
+then use left-facing sprite. If player moves mouse beyond that point, turn player object round 
+by using the correct sprite.
+*/
+
+/*
+Sprite Sheet Info: 
+Target Sprite Size: 32w x 64h
+
+File: player_spritesheet.png
+Target: Player
+Idle Pose:
+	Sprite Size: 32w x 64h
+	Position = 0, 0
+	1 frame.
+Running:
+	Sprite Size: 32w x 64h
+	Position = x33, y0.
+	Total Area = 198w.
+	6 frames.
+Jumping:
+	Sprite Size: 32w x 64h
+	Position = x231.
+	Total Area = 131w.
+	4 frames. (Frame width: 131 / 4 = 32?)
+Lie Down:
+	Sprite Size: 64w x 64h
+	Position = x363.
+	Total Area = 259w.
+	4 frames.
+
+File: zombies.png
+Target: Enemies
+Sprite Size: 32w x 48h
+Idle Pose (All 1 frame):
+	M1: x32, y0
+	M2: x128, y0
+	M3: x224, y0
+	M4: x320, y0
+	F1: x32, y48
+	F2: x128, y48
+	F3: x224, y48
+	F4: x320, y48
+Walking:
+	Total Area = 96w
+	M1: x0, y0
+	M2: x96, y0
+	M3: x192, y0
+	M4: x288, y0
+	F1: x0, y48
+	F2: x96, y48
+	F3: x192, y48
+	F4: x288, y48
+*/
+
 //Glogbal Variables
 //The game window 
 SDL_Window* gWindow = NULL;
@@ -21,8 +86,12 @@ SDL_Surface* gScreenSurface = NULL;
 //The image to be loaded and shown
 SDL_Surface* gHelloWorld = NULL;
 
-//The texture to be loaded and shown
+//The textures to be loaded and shown
+SDL_Texture* gPlayer = NULL;
+SDL_Texture* gEnemies = NULL;
 SDL_Texture* gBackground = NULL;
+
+//Animation frame counter
 
 //Function Prototypes
 void CloseSDL();
@@ -31,6 +100,7 @@ bool InitSDL();
 bool LoadMedia();
 SDL_Surface* LoadSurface(std::string path);
 SDL_Texture* LoadTexture(std::string path);
+SDL_Texture* LoadTexture(std::string path, int cRed, int cGreen, int cBlue);
 bool Update();
 
 int main(int argc, char* args[]) {
@@ -62,7 +132,6 @@ int main(int argc, char* args[]) {
 	return 0;
 }
 
-
 void CloseSDL() {
 	//Deallocate loaded surface
 	if (gHelloWorld != NULL) {
@@ -70,10 +139,20 @@ void CloseSDL() {
 		gHelloWorld = NULL;
 	}
 
-	//Deallocate loaded texture
+	//Deallocate loaded textures
 	if (gBackground != NULL) {
 		SDL_DestroyTexture(gBackground);
 		gBackground = NULL;
+	}
+
+	if (gPlayer != NULL) {
+		SDL_DestroyTexture(gPlayer);
+		gPlayer = NULL;
+	}
+
+	if (gEnemies != NULL) {
+		SDL_DestroyTexture(gEnemies);
+		gEnemies = NULL;
 	}
 
 	//Release the window.
@@ -83,6 +162,7 @@ void CloseSDL() {
 	gWindow = NULL;
 
 	//Quit SDL subsystems.
+	//TTF_Quit();
 	IMG_Quit();
 	SDL_Quit();
 }
@@ -107,11 +187,24 @@ void Draw() {
 	*/
 
 	//Using textures
+	//Set colour to clear screen/window
+	SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
+
 	//Clear screen/window
 	SDL_RenderClear(gRenderer);
 
-	//Render texture to screen
+	//Render background texture to screen
 	SDL_RenderCopy(gRenderer, gBackground, NULL, NULL);
+
+	//Render player texture to screen
+	SDL_Rect renderRect = { 0, 0, 32, 64 };
+	SDL_Rect positionRect = { 20, 20, 32, 64 };
+	SDL_RenderCopy(gRenderer, gPlayer, &renderRect, &positionRect);
+
+	//Render enemy texture to screen
+	renderRect = { 128, 48, 32, 48 };
+	positionRect = { 60, 20, 32, 64 };
+	SDL_RenderCopy(gRenderer, gEnemies, &renderRect, &positionRect);
 
 	//Update screen/window
 	SDL_RenderPresent(gRenderer);
@@ -159,6 +252,7 @@ bool InitSDL() {
 					//Get window surface
 					gScreenSurface = SDL_GetWindowSurface(gWindow);
 				}
+
 			}
 		}
 
@@ -166,6 +260,7 @@ bool InitSDL() {
 
 	return success;
 }
+
 
 bool LoadMedia() {
 	//Loading success flag
@@ -181,9 +276,21 @@ bool LoadMedia() {
 	}
 	*/
 
+	gPlayer = LoadTexture("gfx/player_RGBA.png");// , 64, 128, 0);
+	if (gPlayer == NULL) {
+		cout << "\nFailed to load player texture image!" << endl;
+		success = false;
+	}
+
+	gEnemies = LoadTexture("gfx/zombies_RGBA.png");// , 0x78, 0xC3, 0x80);
+	if (gEnemies == NULL) {
+		cout << "\nFailed to load enemy texture image!" << endl;
+		success = false;
+	}
+
 	gBackground = LoadTexture("gfx/Jumping_Jack_Splash.png");
 	if(gBackground == NULL) {
-		cout << "\nFailed to load texture image!" << endl;
+		cout << "\nFailed to load background texture image!" << endl;
 		success = false;
 	}
 
@@ -210,6 +317,32 @@ SDL_Surface* LoadSurface(std::string path) {
 	}
 
 	return optimisedSurface;
+}
+
+SDL_Texture* LoadTexture(std::string path, int cRed, int cGreen, int cBlue) {
+	//The final texture
+	SDL_Texture* newTexture = NULL;
+
+	//Load image from specified path
+	SDL_Surface* loadedSurface = IMG_Load(path.c_str());
+	if (loadedSurface == NULL) {
+		cout << "\nUnable to load image " << path << "! SDL_image Error: " << IMG_GetError();
+	}
+	else {
+		//Colour key image
+		//SDL_SetColorKey(loadedSurface, SDL_TRUE, SDL_MapRGB(loadedSurface->format, cRed, cBlue, cGreen));
+
+		//Create texture from surface pixels
+		newTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);
+		if (newTexture == NULL) {
+			cout << "\nUnable to create texture from " << path << "! SDL_Error: " << SDL_GetError();
+		}
+
+		//Clean up loaded surface
+		SDL_FreeSurface(loadedSurface);
+	}
+
+	return newTexture;
 }
 
 SDL_Texture* LoadTexture(std::string path) {
