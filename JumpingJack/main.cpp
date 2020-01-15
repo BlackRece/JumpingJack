@@ -92,10 +92,13 @@ SDL_Texture* gEnemies = NULL;
 SDL_Texture* gBackground = NULL;
 
 //Animation frame counter
+const int PLAYER_RUN_FRAMES = 6;
+const int SCREEN_FPS = 60;
+const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
 
 //Function Prototypes
 void CloseSDL();
-void Draw();
+void Draw(int frameCounter);
 bool InitSDL();
 bool LoadMedia();
 SDL_Surface* LoadSurface(std::string path);
@@ -110,6 +113,18 @@ int main(int argc, char* args[]) {
 		//Flag to check if we wish to quit.
 		bool quit = false;
 
+		//Animation frame counter
+		int frameCounter = 0;
+
+		//Animation frame timer
+		int elapsedTime = 0;
+		int startTicks = SDL_GetTicks();
+		int countedFrames = 0;
+		int beginFrameTicks = 0;
+		int endFrameTicks = 0;
+		int countedTicks = 0;
+		float avgFPS = 0;
+
 		//Load assets (eg graphics and sounds).
 		if (!LoadMedia()) {
 			//Something didn't load
@@ -121,8 +136,29 @@ int main(int argc, char* args[]) {
 
 		//Game Loop.
 		while (!quit) {
+			beginFrameTicks = SDL_GetTicks();
+			
+			avgFPS = countedFrames / ((SDL_GetTicks() - startTicks) / 1000.0f);
+			
 			quit = Update();
-			Draw();
+			Draw(frameCounter);
+			
+			countedFrames++;
+			cout << "current frame = " << frameCounter << endl;
+			
+			endFrameTicks = SDL_GetTicks();
+
+			countedTicks = endFrameTicks - beginFrameTicks;
+			if (countedTicks < SCREEN_TICKS_PER_FRAME) {
+				//Wait the remaining time
+				SDL_Delay(SCREEN_TICKS_PER_FRAME - countedTicks);
+			}
+
+			if (frameCounter >= SCREEN_FPS) {
+				frameCounter = 0;
+			} else {
+				frameCounter++;
+			}
 		}
 	}
 
@@ -167,7 +203,7 @@ void CloseSDL() {
 	SDL_Quit();
 }
 
-void Draw() {
+void Draw(int frame) {
 	/*
 	Using surfaces
 
@@ -199,6 +235,8 @@ void Draw() {
 	//Render player texture to screen
 	SDL_Rect renderRect = { 0, 0, 32, 64 };
 	SDL_Rect positionRect = { 20, 20, 32, 64 };
+	//move texture rectangle to current frame
+	renderRect.x = (frame / 6) * renderRect.w + (frame / 6);
 	SDL_RenderCopy(gRenderer, gPlayer, &renderRect, &positionRect);
 
 	//Render enemy texture to screen
